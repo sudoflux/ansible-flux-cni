@@ -115,7 +115,7 @@
       run_once: true
 
     - name: Wait up to 2 minutes for Kubernetes API SERVER on Master
-      ansible.builtin.command: cmd='kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml version'
+      ansible.builtin.command: kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml version
       register: k3s_api_check
       until: k3s_api_check.rc == 0
       retries: 24
@@ -126,7 +126,7 @@
       run_once: true
 
     - name: Final check API server available on Master
-      ansible.builtin.command: cmd='kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml version'
+      ansible.builtin.command: kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml version
       changed_when: false
       delegate_to: "{{ k3s_master_hostname }}"
       run_once: true
