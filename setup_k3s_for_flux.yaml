@@ -140,14 +140,40 @@
       when: inventory_hostname != k3s_master_hostname # Run only on workers
 
     # --- SETUP FLUX CLI & KUBECONFIG ON MASTER ---
-    - name: Install Flux CLI on Master
-      ansible.builtin.shell: cmd='curl -s https://fluxcd.io/install.sh | bash'
+    - name: Attempt to install Flux CLI on Master using official script
+      ansible.builtin.shell:
+        # Use 'bash -c' with 'set -o pipefail'
+        # pipefail ensures the command fails if *any* part of the pipe fails (e.g., curl)
+        cmd: bash -c 'set -o pipefail; curl -sSfL https://fluxcd.io/install.sh | bash'
+        # Added -f to curl to make it fail fast on HTTP errors
+        # Added -L to follow redirects
       args:
-        creates: /usr/local/bin/flux
-      become: yes
+        creates: /usr/local/bin/flux # Still check if it exists first for idempotency
+      register: flux_install_result # Register result to check if it ran
+      changed_when: "'Installed flux' in flux_install_result.stdout or 'already installed' not in flux_install_result.stdout" # Be more specific about change detection
+      failed_when: flux_install_result.rc != 0 and 'already installed' not in flux_install_result.stdout # Fail if exit code != 0, unless script says already installed
+      become: yes # Ensure permissions for /usr/local/bin
       delegate_to: "{{ k3s_master_hostname }}"
       run_once: true
 
+    - name: Check if Flux CLI binary exists after install attempt
+      ansible.builtin.stat:
+        path: /usr/local/bin/flux
+      register: flux_stat_result
+      delegate_to: "{{ k3s_master_hostname }}"
+      run_once: true
+      when: flux_install_result.changed # Only check if the install task reported a change
+
+    - name: Fail if Flux CLI was not installed successfully
+      ansible.builtin.fail:
+        msg: "Flux CLI installation task ran but /usr/local/bin/flux was not found afterwards. Check logs or network connectivity on {{ k3s_master_hostname }}."
+      when:
+        - flux_install_result.changed # Only fail if the install task ran...
+        - not flux_stat_result.stat.exists # ...and the file still doesn't exist
+      delegate_to: localhost # Fail the playbook on the control node
+      run_once: true
+
+    # --- The rest of the Kubeconfig setup tasks remain the same ---
     - name: Ensure .kube directory exists on Master
       ansible.builtin.file: path="{{ target_user_home }}/.kube" state=directory owner="{{ target_user }}" group="{{ target_user }}" mode='0700'
       delegate_to: "{{ k3s_master_hostname }}"
