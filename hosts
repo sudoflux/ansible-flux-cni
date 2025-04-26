@@ -1,0 +1,10 @@
+[master]
+k3s-master1
+
+[workers]
+k3s1
+k3s2
+k3s3
+
+[all:vars]
+ansible_user=josh

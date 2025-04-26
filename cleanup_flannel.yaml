@@ -1,0 +1,41 @@
+---
+- name: Clean up Flannel Components after Cilium is Stable
+  hosts: "{{ lookup('env', 'ANSIBLE_TARGET_HOSTS') | default('all', true) }}" # Target all by default, allows override
+  become: yes
+  gather_facts: no
+  vars:
+    # --- Master Hostname (Ensure this matches inventory) ---
+    k3s_master_hostname: "k3s-master1"
+  tasks:
+    - name: Get Flannel DaemonSet name
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml get ds -n kube-system -l app=flannel -o jsonpath='{.items[0].metadata.name}' --ignore-not-found=true
+      register: flannel_ds_name
+      changed_when: false
+      delegate_to: "{{ k3s_master_hostname }}" # Run kubectl on master
+      run_once: true # Only need to get the name once
+
+    - name: Delete Flannel DaemonSet if found
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig=/etc/rancher/k3s/k3s.yaml delete ds {{ flannel_ds_name.stdout }} -n kube-system --ignore-not-found=true
+      when: flannel_ds_name.stdout | length > 0
+      register: flannel_delete_result
+      changed_when: "'deleted' in flannel_delete_result.stdout"
+      delegate_to: "{{ k3s_master_hostname }}" # Run kubectl on master
+      run_once: true # Only need to delete once
+
+    - name: Display Flannel DaemonSet cleanup result
+      ansible.builtin.debug:
+        msg: "Attempted Flannel DaemonSet cleanup. Result: {{ flannel_delete_result.stdout | default('Not found or already deleted') }}"
+      run_once: true
+
+    - name: Remove Flannel CNI config file from all nodes
+      ansible.builtin.file:
+        path: /etc/cni/net.d/10-flannel.conflist # Adjust filename if k3s uses a different one (e.g., cni0-flannel.conflist)
+        state: absent
+      # Runs on each host defined in the play's 'hosts:' target
+
+    - name: Flannel Cleanup Complete
+      ansible.builtin.debug:
+        msg: "Flannel cleanup playbook finished."
+      run_once: true
