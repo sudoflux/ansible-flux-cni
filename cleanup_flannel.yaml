@@ -31,8 +31,12 @@
 
     - name: Remove Flannel CNI config file from all nodes
       ansible.builtin.file:
-        path: /etc/cni/net.d/10-flannel.conflist # Adjust filename if k3s uses a different one (e.g., cni0-flannel.conflist)
+        # --- CORRECT THIS PATH ---
+        path: /var/lib/rancher/k3s/agent/etc/cni/net.d/10-flannel.conflist # Adjust filename if k3s uses a different one
+        # --------------------------
         state: absent
+      register: flannel_file_delete_result # Register the result
+      changed_when: flannel_file_delete_result.changed # Show change only if file was deleted
       # Runs on each host defined in the play's 'hosts:' target
 
     - name: Flannel Cleanup Complete
